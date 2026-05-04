@@ -256,13 +256,17 @@
     let measurementDuration = 10000;
     let startTime       = Date.now();
 
-    // ——— PHYSICS: BETA ABSORPTION TABLE ———
-    function getAbsorbProb(matType) {
-        // Beta: passes paper, partially stopped by aluminium, mostly stopped by lead
-        if (matType === 'paper')    return 0.002;
-        if (matType === 'aluminum') return 0.07;
-        if (matType === 'lead')     return 0.55;
-        return 0;
+    // ——— PHYSICS ———
+    // Linjär dämpningskoefficient μ (per px) för beta i respektive material.
+    // Halvvärdestjocklek x½ = ln(2)/μ  →  med skalan 4 px = 1 mm:
+    //   Papper:    x½ ≈ 40 mm  → μ = ln2/(40*4) ≈ 0.0043 /px   (beta passerar lätt)
+    //   Aluminium: x½ ≈  4 mm  → μ = ln2/(4*4)  ≈ 0.043  /px   (märkbar dämpning)
+    //   Bly:       x½ ≈  1 mm  → μ = ln2/(1*4)  ≈ 0.17   /px   (stoppas snabbt)
+    const MU = { paper: 0.0043, aluminum: 0.043, lead: 0.17 };
+
+    // Sannolikheten att en partikel överlever en sträcka d (px) i materialet
+    function survivalProb(matType, distPx) {
+        return Math.exp(-MU[matType] * distPx);
     }
 
     // ——— EVENTS ———
@@ -311,54 +315,84 @@
     }
 
     // ——— PARTICLE ———
+    // Fix 3: emit only into right half-plane (källa är inkapslad baktill)
+    // Fix 4: detektor räknar bara träff mot vänster sensoryta (x-ingång)
+    // Fix 5: absorption beräknas på hela stegsträckan i ett svep (ej per pixel)
     class Particle {
         constructor() { this.reset(); }
 
         reset() {
             this.x = sourcePos.x;
             this.y = sourcePos.y;
-            const angle = Math.random() * Math.PI * 2;
-            // Beta: medium speed, long range in air
-            const speed = 5 + Math.random() * 1;
+            // Fix 3: begränsa till höger halvplan, ±80° kring x-axeln
+            const angle = (Math.random() - 0.5) * Math.PI * 1.6;
+            const speed = 4 + Math.random() * 2;
             this.vx = Math.cos(angle) * speed;
             this.vy = Math.sin(angle) * speed;
-            this.life  = 0.55 + Math.random() * 0.2;
-            this.decay = 0.0022;
-            this.colorRaw = '147, 197, 253'; // blue-ish
+            this.life  = 0.6 + Math.random() * 0.2;
+            this.decay = 0.002;
+            this.colorRaw = '147, 197, 253';
             this.size  = 1.2;
             this.active = true;
         }
 
         update() {
             if (!this.active) return;
+
+            const prevX = this.x;
+            const prevY = this.y;
             this.x += this.vx;
             this.y += this.vy;
             this.life -= this.decay;
 
+            // Fix 1+2+5: beräkna överlappande sträcka med materialet i detta steg
+            // och applicera Beer-Lambert på hela sträckan på en gång.
             const matW = materialThickness;
+            if (matW > 0) {
+                const matLeft  = matBlock.x;
+                const matRight = matBlock.x + matW;
+                const matTop   = matBlock.y;
+                const matBot   = matBlock.y + matBlock.height;
 
-            if (matW > 0 &&
-                this.x > matBlock.x && this.x < matBlock.x + matW &&
-                this.y > matBlock.y && this.y < matBlock.y + matBlock.height) {
+                // Partikelns steg som segment [prev → current]
+                // Beräkna x-överlapp med materialet för detta steg
+                const segX0 = Math.min(prevX, this.x);
+                const segX1 = Math.max(prevX, this.x);
+                const overlapX = Math.max(0, Math.min(segX1, matRight) - Math.max(segX0, matLeft));
 
-                const p = getAbsorbProb(matBlock.type);
-                if (Math.random() < p) {
-                    absorbedMarkers.push(new AbsorbedMarker(this.x, this.y));
+                // Fix 5: hoppar inte över tunt material – overlapX fångar hela steget
+                if (overlapX > 0) {
+                    // Kontrollera y-position (mitt av steget)
+                    const midY = (prevY + this.y) / 2;
+                    if (midY > matTop && midY < matBot) {
+                        // Beer-Lambert: sannolikhet att överleva sträckan overlapX
+                        const survive = survivalProb(matBlock.type, overlapX);
+                        if (Math.random() > survive) {
+                            // Absorberad – placera markör mitt i överlappet
+                            const absX = Math.max(segX0, matLeft) + overlapX / 2;
+                            absorbedMarkers.push(new AbsorbedMarker(absX, midY));
+                            this.life = 0;
+                            this.active = false;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Fix 4: räkna träff mot detektorns vänstra sensoryta
+            // Partikeln måste korsa x = detector.x - width/2 (vänster kant)
+            const sensorX = detector.x - detector.width / 2;
+            if (prevX <= sensorX && this.x >= sensorX) {
+                // Interpolera y vid sensorplanet
+                const t = (sensorX - prevX) / (this.x - prevX);
+                const hitY = prevY + t * (this.y - prevY);
+                if (hitY > detector.y - detector.height / 2 &&
+                    hitY < detector.y + detector.height / 2) {
+                    detector.counts++;
                     this.life = 0;
                     this.active = false;
                     return;
                 }
-            }
-
-            // Detector hit
-            if (this.x > detector.x - detector.width/2 &&
-                this.x < detector.x + detector.width/2 &&
-                this.y > detector.y - detector.height/2 &&
-                this.y < detector.y + detector.height/2) {
-                detector.counts++;
-                this.life = 0;
-                this.active = false;
-                return;
             }
 
             if (this.life <= 0 ||
