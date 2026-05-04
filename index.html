@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provuppgift – Identifiera strålningstyp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #181c26;
+            --surface2: #1e2333;
+            --border: #2a3050;
+            --accent: #f0c040;
+            --accent2: #4fd1c5;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --red: #ef4444;
+            --green: #22c55e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Barlow', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .page-header {
+            width: 100%;
+            max-width: 920px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .header-left h1 {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.25rem;
+            color: var(--accent);
+            letter-spacing: 0.04em;
+        }
+
+        .header-left p {
+            font-size: 0.82rem;
+            color: var(--muted);
+            margin-top: 2px;
+            max-width: 520px;
+            line-height: 1.5;
+        }
+
+        .task-badge {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--accent2);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .sim-wrapper {
+            width: 100%;
+            max-width: 920px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            background: #0a0c12;
+        }
+
+        .controls-bar {
+            background: var(--surface2);
+            border-top: 1px solid var(--border);
+            padding: 14px 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .ctrl-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .ctrl-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        select, input[type=range] {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 5px;
+            padding: 5px 8px;
+            font-size: 0.85rem;
+            font-family: 'Barlow', sans-serif;
+        }
+
+        select:focus { outline: 1px solid var(--accent2); }
+
+        input[type=range] {
+            appearance: none;
+            height: 5px;
+            padding: 0;
+            cursor: pointer;
+            accent-color: var(--accent);
+            width: 120px;
+        }
+
+        .divider {
+            width: 1px;
+            height: 40px;
+            background: var(--border);
+            flex-shrink: 0;
+        }
+
+        .readout {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .readout span:first-child {
+            font-size: 0.65rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+
+        .readout .val {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            color: var(--accent);
+        }
+
+        .readout .val.green { color: var(--green); }
+        .readout .val.cyan  { color: var(--accent2); }
+
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="header-left">
+        <h1>// STRÅLNING – IDENTIFIERA SÖNDERFALLSTYP</h1>
+        <p>En okänd källa sänder ut strålning. Experimentera med material och tjocklek, observera hur detektorn reagerar – och identifiera vilken typ av sönderfall det rör sig om.</p>
+    </div>
+    <div class="task-badge">PROVUPPGIFT<br>Radioaktivitet</div>
+</div>
+
+<div class="sim-wrapper">
+    <canvas id="simCanvas" width="900" height="380"></canvas>
+    <div class="controls-bar">
+
+        <div class="ctrl-group">
+            <span class="ctrl-label">Material</span>
+            <select id="materialType">
+                <option value="paper">Papper</option>
+                <option value="aluminum" selected>Aluminium</option>
+                <option value="lead">Bly</option>
+            </select>
+        </div>
+
+        <div class="ctrl-group">
+            <span class="ctrl-label">Tjocklek: <span id="thicknessVal">12.5</span> mm</span>
+            <input type="range" id="thicknessSlider" min="0" max="100" value="50">
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="ctrl-group">
+            <span class="ctrl-label">Mättid: <span id="durationVal">10</span> s</span>
+            <input type="range" id="durationSlider" min="1" max="60" value="10">
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="readout">
+            <span>Aktuell</span>
+            <span id="currentCount" class="val green">0</span>
+        </div>
+
+        <div class="readout">
+            <span>Senaste mätning</span>
+            <span id="lastResult" class="val cyan">—</span>
+        </div>
+
+    </div>
+</div>
+
+
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx    = canvas.getContext('2d');
+
+    // ——— CONTROLS ———
+    const thicknessSlider = document.getElementById('thicknessSlider');
+    const durationSlider  = document.getElementById('durationSlider');
+    const materialSelect  = document.getElementById('materialType');
+    const thicknessValEl  = document.getElementById('thicknessVal');
+    const durationValEl   = document.getElementById('durationVal');
+    const currentCountEl  = document.getElementById('currentCount');
+    const lastResultEl    = document.getElementById('lastResult');
+
+    // ——— STATE ———
+    const RADIATION_TYPE = 'beta';
+
+    const ACTIVE_PARTICLES = 600; // Hög intern aktivitet, lågt antal synliga partiklar
+
+    const sourcePos = { x: 110, y: 190 };
+
+    const matBlock = {
+        x: 230,
+        y: 40,
+        height: 300,
+        type: 'aluminum'
+    };
+
+    let materialThickness = 50; // slider units (0-100)
+
+    const detector = {
+        x: 620, y: 190,
+        width: 44, height: 90,
+        counts: 0, lastResult: 0,
+        isDragging: false,
+        isSnapped: true,
+        isSnappedToWall: false
+    };
+
+    let particles       = [];
+    let absorbedMarkers = [];
+    let measurementDuration = 10000;
+    let startTime       = Date.now();
+
+    // ——— PHYSICS: BETA ABSORPTION TABLE ———
+    function getAbsorbProb(matType) {
+        // Beta: passes paper, partially stopped by aluminium, mostly stopped by lead
+        if (matType === 'paper')    return 0.002;
+        if (matType === 'aluminum') return 0.07;
+        if (matType === 'lead')     return 0.55;
+        return 0;
+    }
+
+    // ——— EVENTS ———
+    thicknessSlider.addEventListener('input', e => {
+        const v = parseInt(e.target.value);
+        if (detector.isSnappedToWall) {
+            const wallRight = matBlock.x + v;
+            let nx = wallRight + detector.width/2 + 5;
+            nx = Math.min(canvas.width - detector.width/2, nx);
+            detector.x = nx;
+        }
+        materialThickness = v;
+        thicknessValEl.textContent = (v / 4).toFixed(1);
+    });
+
+    durationSlider.addEventListener('input', e => {
+        measurementDuration = e.target.value * 1000;
+        durationValEl.textContent = e.target.value;
+        resetTimer();
+    });
+
+    materialSelect.addEventListener('change', e => {
+        matBlock.type = e.target.value;
+        absorbedMarkers = [];
+    });
+
+    function resetTimer() {
+        detector.counts = 0;
+        startTime = Date.now();
+    }
+
+    // ——— ABSORBED MARKER ———
+    class AbsorbedMarker {
+        constructor(x, y) {
+            this.x = x; this.y = y;
+            this.life = 1.0;
+            this.decay = 0.05;
+        }
+        update() { this.life -= this.decay; }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 2.5, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(239,68,68,${this.life})`;
+            ctx.fill();
+        }
+    }
+
+    // ——— PARTICLE ———
+    class Particle {
+        constructor() { this.reset(); }
+
+        reset() {
+            this.x = sourcePos.x;
+            this.y = sourcePos.y;
+            const angle = Math.random() * Math.PI * 2;
+            // Beta: medium speed, long range in air
+            const speed = 5 + Math.random() * 1;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life  = 0.55 + Math.random() * 0.2;
+            this.decay = 0.0022;
+            this.colorRaw = '147, 197, 253'; // blue-ish
+            this.size  = 1.2;
+            this.active = true;
+        }
+
+        update() {
+            if (!this.active) return;
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= this.decay;
+
+            const matW = materialThickness;
+
+            if (matW > 0 &&
+                this.x > matBlock.x && this.x < matBlock.x + matW &&
+                this.y > matBlock.y && this.y < matBlock.y + matBlock.height) {
+
+                const p = getAbsorbProb(matBlock.type);
+                if (Math.random() < p) {
+                    absorbedMarkers.push(new AbsorbedMarker(this.x, this.y));
+                    this.life = 0;
+                    this.active = false;
+                    return;
+                }
+            }
+
+            // Detector hit
+            if (this.x > detector.x - detector.width/2 &&
+                this.x < detector.x + detector.width/2 &&
+                this.y > detector.y - detector.height/2 &&
+                this.y < detector.y + detector.height/2) {
+                detector.counts++;
+                this.life = 0;
+                this.active = false;
+                return;
+            }
+
+            if (this.life <= 0 ||
+                this.x < 0 || this.x > canvas.width ||
+                this.y < 0 || this.y > canvas.height) {
+                this.reset();
+            }
+        }
+
+        draw() {
+            if (!this.active) return;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(${this.colorRaw},${this.life})`;
+            ctx.fill();
+        }
+    }
+
+    function initParticles() {
+        particles = [];
+        for (let i = 0; i < ACTIVE_PARTICLES; i++) particles.push(new Particle());
+    }
+
+    // ——— DRAW ———
+
+    function drawGrid() {
+        ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < canvas.width; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+    }
+
+    function drawCenterLine() {
+        ctx.setLineDash([8, 8]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(sourcePos.x, sourcePos.y);
+        ctx.lineTo(canvas.width, sourcePos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    function drawSource() {
+        // Outer glow
+        const grad = ctx.createRadialGradient(sourcePos.x, sourcePos.y, 0, sourcePos.x, sourcePos.y, 28);
+        grad.addColorStop(0, 'rgba(147,197,253,0.25)');
+        grad.addColorStop(1, 'rgba(147,197,253,0)');
+        ctx.beginPath();
+        ctx.arc(sourcePos.x, sourcePos.y, 28, 0, Math.PI*2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Shell
+        ctx.beginPath();
+        ctx.arc(sourcePos.x, sourcePos.y, 10, 0, Math.PI*2);
+        ctx.fillStyle = '#334155';
+        ctx.fill();
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Core — neutral grey, no color clue
+        ctx.beginPath();
+        ctx.arc(sourcePos.x, sourcePos.y, 5, 0, Math.PI*2);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fill();
+
+        // Label
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('KÄLLA', sourcePos.x, sourcePos.y - 18);
+        ctx.fillText('[OKÄND]', sourcePos.x, sourcePos.y + 26);
+    }
+
+    function drawMaterial() {
+        if (materialThickness <= 0) return;
+        const mW = materialThickness;
+
+        let fill, stroke, label, textCol;
+        if (matBlock.type === 'paper')    { fill='#2d2a1e'; stroke='#6b6030'; label='PAPPER'; textCol='#a89030'; }
+        else if (matBlock.type === 'aluminum') { fill='#1e2533'; stroke='#3a5070'; label='ALUMINIUM'; textCol='#5a90b0'; }
+        else { fill='#1a1e28'; stroke='#3a3f55'; label='BLY'; textCol='#5a6080'; }
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(matBlock.x + 4, matBlock.y + 4, mW, matBlock.height);
+
+        ctx.fillStyle = fill;
+        ctx.fillRect(matBlock.x, matBlock.y, mW, matBlock.height);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = stroke;
+        ctx.strokeRect(matBlock.x, matBlock.y, mW, matBlock.height);
+
+        if (mW > 18) {
+            ctx.save();
+            ctx.translate(matBlock.x + mW/2, matBlock.y + 18);
+            ctx.rotate(Math.PI/2);
+            ctx.fillStyle = textCol;
+            ctx.font = '11px Share Tech Mono, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+        }
+
+        // Thickness annotation
+        ctx.fillStyle = '#64748b';
+        ctx.font = '9px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${(materialThickness/4).toFixed(1)} mm`, matBlock.x + mW/2, matBlock.y - 6);
+    }
+
+    function drawDetector() {
+        const { x, y, width, height } = detector;
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Glow when counting
+        if (detector.counts > 0) {
+            const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 50);
+            g.addColorStop(0, 'rgba(79,209,197,0.12)');
+            g.addColorStop(1, 'rgba(79,209,197,0)');
+            ctx.beginPath();
+            ctx.arc(0, 0, 50, 0, Math.PI*2);
+            ctx.fillStyle = g;
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#1e2333';
+        ctx.strokeStyle = detector.isSnappedToWall ? '#f0c040' : (detector.isSnapped ? '#4fd1c5' : '#334155');
+        ctx.lineWidth = detector.isSnapped ? 2 : 1;
+        ctx.beginPath();
+        ctx.roundRect(-width/2, -height/2, width, height, 5);
+        ctx.fill(); ctx.stroke();
+
+        // Sensor face
+        ctx.fillStyle = '#0f1117';
+        ctx.fillRect(-width/2, -height/2, 8, height);
+        ctx.fillStyle = '#4fd1c5';
+        ctx.globalAlpha = 0.5 + 0.5 * Math.min(1, detector.counts / 20);
+        ctx.fillRect(-width/2 + 1, -height/2 + 4, 4, height - 8);
+        ctx.globalAlpha = 1;
+
+        const screenW = width - 14;
+        const screenH = 18;
+        const s1y = -height/2 + 16;
+
+        // Current count screen
+        ctx.fillStyle = '#0a1020';
+        ctx.fillRect(-screenW/2, s1y, screenW, screenH);
+        ctx.fillStyle = '#4fd1c5';
+        ctx.font = 'bold 12px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(detector.counts, 0, s1y + screenH/2);
+        ctx.fillStyle = '#2d4060';
+        ctx.font = '8px Share Tech Mono, monospace';
+        ctx.fillText('AKTUELL', 0, s1y - 5);
+
+        const s2y = s1y + screenH + 16;
+        ctx.fillStyle = '#0a1020';
+        ctx.fillRect(-screenW/2, s2y, screenW, screenH);
+        ctx.fillStyle = '#8892a0';
+        ctx.font = 'bold 12px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(detector.lastResult === 0 ? '—' : detector.lastResult, 0, s2y + screenH/2);
+        ctx.fillStyle = '#2d4060';
+        ctx.font = '8px Share Tech Mono, monospace';
+        ctx.fillText('SENASTE', 0, s2y - 5);
+
+        // Timer
+        const elapsed   = Date.now() - startTime;
+        const remaining = Math.max(0, (measurementDuration - elapsed) / 1000).toFixed(1);
+        ctx.fillStyle = '#4a5568';
+        ctx.font = '9px Share Tech Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(`${remaining}s`, 0, -height/2 - 6);
+
+        // Stand
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, height/2); ctx.lineTo(0, height/2 + 18);
+        ctx.moveTo(-10, height/2 + 18); ctx.lineTo(10, height/2 + 18);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function updateTimer() {
+        const now = Date.now();
+        if (now - startTime >= measurementDuration) {
+            detector.lastResult = detector.counts;
+            lastResultEl.textContent = detector.lastResult;
+            detector.counts = 0;
+            startTime = now;
+        }
+        currentCountEl.textContent = detector.counts;
+    }
+
+    function animate() {
+        ctx.fillStyle = 'rgba(10,12,18,0.35)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawGrid();
+        drawCenterLine();
+        drawSource();
+        drawMaterial();
+
+        for (let i = 0; i < particles.length; i++) {
+            if (!particles[i].active) particles[i].reset();
+            particles[i].update();
+            particles[i].draw();
+        }
+
+        for (let i = absorbedMarkers.length - 1; i >= 0; i--) {
+            absorbedMarkers[i].update();
+            absorbedMarkers[i].draw();
+            if (absorbedMarkers[i].life <= 0) absorbedMarkers.splice(i, 1);
+        }
+
+        drawDetector();
+        updateTimer();
+        requestAnimationFrame(animate);
+    }
+
+    // ——— DRAG ———
+    function getPos(e) {
+        const r = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / r.width;
+        const scaleY = canvas.height / r.height;
+        return {
+            x: (e.clientX - r.left) * scaleX,
+            y: (e.clientY - r.top) * scaleY
+        };
+    }
+
+    function overDetector(p) {
+        return p.x > detector.x - detector.width/2 - 20 &&
+               p.x < detector.x + detector.width/2 + 20 &&
+               p.y > detector.y - detector.height/2 - 20 &&
+               p.y < detector.y + detector.height/2 + 20;
+    }
+
+    function handleMove(x, y) {
+        if (!detector.isDragging) {
+            canvas.style.cursor = overDetector({x,y}) ? 'grab' : 'default';
+            return;
+        }
+        canvas.style.cursor = 'grabbing';
+        let nx = Math.max(detector.width/2 + 20, Math.min(canvas.width - detector.width/2, x));
+        let ny = Math.max(detector.height/2, Math.min(canvas.height - detector.height/2, y));
+
+        let snY = false;
+        if (nx > sourcePos.x && Math.abs(ny - sourcePos.y) < 30) {
+            ny = sourcePos.y; snY = true;
+        }
+        detector.isSnapped = snY;
+        detector.y = ny;
+
+        detector.isSnappedToWall = false;
+        if (snY && materialThickness > 0) {
+            const wallRight = matBlock.x + materialThickness;
+            const snapX = wallRight + detector.width/2 + 5;
+            if (Math.abs(nx - snapX) < 40) {
+                nx = snapX;
+                detector.isSnappedToWall = true;
+            }
+        }
+        detector.x = nx;
+    }
+
+    canvas.addEventListener('mousedown', e => {
+        const p = getPos(e);
+        if (overDetector(p)) { detector.isDragging = true; detector.isSnapped = false; detector.isSnappedToWall = false; }
+    });
+    canvas.addEventListener('mousemove', e => { const p = getPos(e); handleMove(p.x, p.y); });
+    window.addEventListener('mouseup', () => { detector.isDragging = false; });
+
+    canvas.addEventListener('touchstart', e => {
+        const t = e.touches[0], r = canvas.getBoundingClientRect();
+        const p = { x: (t.clientX-r.left)*(canvas.width/r.width), y: (t.clientY-r.top)*(canvas.height/r.height) };
+        if (overDetector(p)) detector.isDragging = true;
+    }, {passive:false});
+    window.addEventListener('touchmove', e => {
+        if (!detector.isDragging) return;
+        e.preventDefault();
+        const t = e.touches[0], r = canvas.getBoundingClientRect();
+        handleMove((t.clientX-r.left)*(canvas.width/r.width), (t.clientY-r.top)*(canvas.height/r.height));
+    }, {passive:false});
+    window.addEventListener('touchend', () => { detector.isDragging = false; });
+
+    // ——— START ———
+    initParticles();
+    animate();
+</script>
+</body>
+</html>
